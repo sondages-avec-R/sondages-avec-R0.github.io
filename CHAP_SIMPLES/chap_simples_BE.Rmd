@@ -1,0 +1,87 @@
+---
+title: "chap_simples_BE"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PLAN BE
+
+```{r}
+ BE1 <- function(N,Pi)
+ {
+ u <- runif(N, 0, 1)
+ as.numeric(u<Pi)
+ }
+```
+
+```{r}
+set.seed(123456)
+BE1(20,0.25)
+# [1] 0 0 0 0 0 1 0 1 0 1 0 0 0 0 0 0 0 1 0 0
+```
+
+```{r}
+set.seed(345678)
+BE1(20,0.25)
+# [1] 1 0 0 0 0 0 1 0 1 0 0 0 0 0 1 0 1 0 0 0
+```
+
+```{r}
+ BE2 <- function(N,Pi)
+ {
+ n <- rbinom(1,N,Pi)
+ srswor(n,N)
+ }
+```
+
+```{r}
+library(sampling)
+set.seed(123456)
+BE2(20,0.25)
+# [1] 0 1 0 1 0 0 1 1 1 0 0 0 0 0 0 1 0 1 0 0
+ set.seed(345678)
+ BE2(20,0.25)
+# [1] 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 0 1 0 0
+```
+
+```{r}
+ set.seed(123456)
+ pik <- rep(0.25,20)
+ UPpoisson(pik)
+ #[1] 0 0 0 0 0 1 0 1 0 1 0 0 0 0 0 0 0 1 0 0
+```
+
+```{r}
+ library(sampling)
+ data(rec99)
+ N <- nrow(rec99)
+ n <- 70
+ set.seed(123456)
+ s.be <- BE1(N,n/N)
+ sum(s.be==1)
+ #63
+```
+
+```{r}
+ rec.be <- rec99[s.be==1,]
+ (N/n)*sum(rec.be$LOGVAC)
+ #[1] 8761.114
+```
+
+```{r}
+(N/n-1)*(N/n)*sum(rec.be$LOGVAC^2)
+ #[1] 2755398
+```
+
+```{r}
+pik <- rep(n/N,N)
+s.be1 <- UPpoisson(pik)
+sum(s.be1==1)
+#[1] 61
+```

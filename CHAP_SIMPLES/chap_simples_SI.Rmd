@@ -1,0 +1,172 @@
+---
+title: "chap_simples PLAN SI"
+output: pdf_document
+date: "2025-07-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Détermination de la taille d'échantillon
+
+
+```{r}
+ e <- 0.03
+ p <- c(0.05, 0.10, 0.3, 0.5)
+ z <- qnorm(0.975,0,1)
+ (n0 <- z^2*p*(1-p)/e^2)
+ #[1] 202.7511 384.1600 896.3733 1067.1111
+```
+
+```{r}
+ e <- 0.01
+ (n0 <- z^2*p*(1-p)/e^2)
+ #[1] 1824.76 3457.44 8067.36 9604.00
+```
+
+## Plan SI
+
+```{r}
+ set.seed(123456)
+ sample(20,5)
+ #[1] 16 15 8 6 17
+```
+
+```{r}
+ library(sampling)
+ set.seed(123456)
+ (si <- srswor(5,20))
+ #[1] 0 0 0 0 0 1 0 1 0 0 0 0 0 0 1 1 1 0 0 0
+```
+
+```{r}
+ which(si==1)
+ #[1] 6 8 15 16 17
+```
+
+```{r}
+ set.seed(345678)
+ srswor(5,20)
+ #[1] 0 0 0 1 0 0 1 0 0 0 0 0 1 0 1 0 1 0 0 0
+ set.seed(123456)
+ srswor(5,20)
+ #[1] 0 0 0 0 0 1 0 1 0 0 0 0 0 0 1 1 1 0 0 0
+```
+
+```{r}
+w <- writesample(5,20)
+dim(w)
+# [1] 15504
+# 20
+```
+
+```{r}
+ library(sampling)
+ data(rec99)
+ (N <- nrow(rec99))
+ #[1] 554
+```
+
+```{r}
+n <- 70
+set.seed(123456)
+si.rec <- srswor(n,N)
+(nom <- rec99$COMMUNE[si.rec==1][1:10])
+# [1] CAZAUNOUS MILHAS ASPET AURAGNE BEAUMONT-SUR
+# [6] BENQUE-DESSO JURVIELLE SALLES-ET-PR TREBONS-DE-L AIGREFEUILLE
+```
+
+```{r}
+ si.logvac <- rec99$LOGVAC[si.rec==1]
+ N*mean(si.logvac)
+ #[1] 9441.743
+```
+
+```{r}
+pik.si <- rep(n/N, n)
+```
+
+```{r}
+ HTestimator(si.logvac,pik.si)
+ #[,1]
+ #[1,] 9441.743
+```
+
+```{r}
+set.seed(345678)
+si.rec2 <- srswor(n,N)
+si.logvac2 <- rec99$LOGVAC[si.rec2==1]
+HTestimator(si.logvac2,pik.si)
+# [,1]
+# [1,] 10383.54
+```
+
+```{r}
+ HTestimator(si.logvac,pik.si)-sum(rec99$LOGVAC)
+ #[,1]
+ #[1,]-1326.257
+```
+
+```{r}
+ HTestimator(si.logvac2,pik.si)-sum(rec99$LOGVAC)
+# [,1]
+# [1,]-384.4571
+```
+
+```{r}
+ N^2*(1-n/N)*var(si.logvac)/n
+ #[1] 1745875
+```
+
+```{r}
+pikl.si <- matrix(n*(n-1)/(N*(N-1)),n,n)
+diag(pikl.si) <- n/N
+varHT(si.logvac,pikl.si)
+# [1] 1745875
+```
+
+```{r}
+library(survey)
+ech.si <- svydesign(id=~CODE_N, weights=rep(N/n,n),
+ fpc=rep(n/N,n), data=rec99[si.rec==1,])
+```
+
+```{r}
+ (est.si <- svytotal(~LOGVAC, ech.si)[1])
+# LOGVAC
+# 9441.743
+ (se.si <- SE(svytotal(~LOGVAC, ech.si)))
+# LOGVAC
+# LOGVAC 1321.316
+```
+
+```{r}
+ svytotal(~LOGVAC, ech.si)
+ #total
+ #SE
+ #LOGVAC 9441.7 1321.3
+```
+
+```{r}
+attributes(ech.si)
+ #$names
+ #[1] "cluster"
+ #"strata"
+ #[6] "call"
+ #"has.strata" "prob"
+ #"variables" "fpc"
+ #"allprob"
+ #"pps"
+```
+
+```{r}
+ech.si$variables[1:5,]
+ #CODE_N
+ #COMMUNE BVQ_N POPSDC99 LOG LOGVAC stratlog
+ #2  8  31131  31342  10 31020  42 31024  CAZAUNOUS 31020  MILHAS 31020  ASPET 31020  47 56
+ #4  140 150  923 684  AURAGNE 31033  43 31052 BEAUMONT-SUR 31033  310 129
+ #1414 563  10  90  8 20  1  2  3  2  3
+```
+
+

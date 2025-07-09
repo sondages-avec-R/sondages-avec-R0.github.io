@@ -1,0 +1,48 @@
+---
+title: "chap_simples_SY"
+output: pdf_document
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PLAN SY
+
+```{r}
+ a <- 13/3
+ (u <- runif(1,min=0,max=a))
+ #[1] 3.337597
+ u+0:2*13/3
+ #[1] 3.337597 7.670930 12.004263
+ ceiling(u+0:2*a)
+ #[1] 4 8 13
+```
+
+```{r}
+library(sampling)
+ pik <- rep(3/20, 20)
+ UPsystematic(pik)
+ #[1] 0 1 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0 0
+```
+
+```{r}
+library(sampling)
+data(rec99)
+N <- nrow(rec99)
+n <- 70
+pik <- rep(n/N,N)
+set.seed(123456)
+sy.rec <- UPsystematic(pik)
+```
+
+```{r}
+library(survey)
+ech.sy <- svydesign(id=~CODE_N, weights=rep(N/n,n),
+fpc=rep(n/N,n), data=rec99[sy.rec==1,])
+svytotal(~LOGVAC, ech.sy)
+# total
+# SE
+# LOGVAC 7795.6 980.08
+```
