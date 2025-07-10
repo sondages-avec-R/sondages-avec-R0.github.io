@@ -1,0 +1,60 @@
+---
+title: "chap_pipps_comparaison"
+output: pdf_document
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##  Comparaison des stratégies (SI, HT) (PO, HT) et (SY, HT) par étude de Monte-Carlo
+
+```{r}
+library(survey)
+library(sampling)
+data(rec99); attach(rec99)
+```
+
+
+```{r}
+ N <- nrow(rec99)
+ n <- 70
+ y <- LOGVAC
+ pik <- inclusionprobabilities(LOG,n)
+ pik.egales <- rep(n/N,N)
+ n.sim <- 10000
+ r1 <- replicate(n.sim, srswor(n,N))
+ ht1 <- apply(r1, 2, FUN=function(s,y,pik)
+ HTestimator(y[s==1],pik[s==1]),y,pik.egales)
+ r2 <- replicate(n.sim, UPpoisson(pik))
+ ht2 <- apply(r2, 2, FUN=function(s,y,pik)
+ HTestimator(y[s==1],pik[s==1]),y,pik)
+ r3 <- replicate(n.sim, UPsystematic(pik))
+ ht3 <- apply(r3, 2, FUN=function(s,y,pik)
+ HTestimator(y[s==1],pik[s==1]),y,pik)
+```
+ 
+```{r}
+# CV
+sqrt(var(ht1))/mean(ht1)
+sqrt(var(ht2))/mean(ht2)
+sqrt(var(ht3))/mean(ht3)
+```
+
+## Pour aller plus loin avec R
+
+```{r}
+set.seed(12345)
+ n.sim <- 10000
+ Prob <- matrix(0,nrow=n.sim,ncol=N)
+ for(i in 1:n.sim)
+  {
+ 
+ s <- sample(1:N,n,prob=pik)
+ 
+ Prob[i,1:N] <- (1:N %in% s)
+  }
+ pik_estimées <- apply(Prob,2,mean)
+ max(pik_estimées/pik)
+ #[1] 1.451524
+```

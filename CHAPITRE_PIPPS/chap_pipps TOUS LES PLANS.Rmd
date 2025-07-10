@@ -1,0 +1,230 @@
+---
+title: "chap_pipps_ tous les PLANS"
+output: pdf_document
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##  Plan à probabilités inégales et avec remise
+
+```{r}
+library(sampling)
+data(rec99)
+attach(rec99)
+(N <- length(LOG))
+# [1] 554
+tLOG <- sum(LOG)
+pk <- LOG/tLOG
+```
+
+```{r}
+m<-70
+set.seed(12345)
+(ech.pps.o <- sample(N,m,replace=TRUE,prob=pk))
+```
+
+```{r}
+(R_ech.pps.o <- table(ech.pps.o))
+```
+
+```{r}
+m <- 70
+set.seed(12345)
+R <- UPmultinomial(m*pk)
+```
+
+```{r}
+ table(R)
+ sum(R)
+# [1] 70
+ (ech.pps.o <- rep((1:N)[R!=0],R[R!=0]))
+```
+
+```{r}
+ech.pps <- which(R!=0)
+length(ech.pps)
+# [1] 60
+LOGVAC.ech.pps <- (LOGVAC/pk)[ech.pps]
+```
+
+```{r}
+ R_ech.pps <- R[ech.pps]
+ (LOGVAC.HH <- sum(R_ech.pps*LOGVAC.ech.pps)/m)
+ #[1] 10272.93
+ (var.est.HH <- sum(R_ech.pps*(LOGVAC.ech.pps-LOGVAC.HH)^2)/(m*(m-1)))
+ #[1] 565951
+```
+
+```{r}
+c(LOGVAC.HH-qnorm(0.975)*sqrt(var.est.HH),
+ LOGVAC.HH+qnorm(0.975)*sqrt(var.est.HH))
+# [1] 8798.453 11747.403
+```
+
+```{r}
+sum(LOGVAC)
+# [1] 10768
+```
+
+```{r}
+library(survey)
+ recs <- cbind.data.frame(rec99, poids=1/(m*pk))
+ recs.o <- recs[ech.pps.o,]
+ design.pps <- svydesign(id=~1,weights=recs.o$poids, data=recs.o)
+ res.pps <- svytotal(~LOGVAC, design.pps)
+ print(ftable(res.pps),digits=5)
+ #LOGVAC
+ #LOGVAC 10272.9 752.3
+```
+
+
+##  Plan à probabilités inégales et sans remise
+
+```{r}
+ n <- 70
+ pik <- inclusionprobabilities(LOG,n)
+```
+
+```{r}
+ rec99[pik==1,c(2,5)]
+# COMMUNE LOG 32 AUTERIVE 2777 39 BAGNERES-DE- 4490 106 CASTELGINEST 2874 403 PORTET-SUR-G 3473 419 REVEL 3894 455 SAINT-JEAN 3288 549 VILLENEUVE-T 3189
+```
+
+```{r}
+ summary(pik[pik<1])
+ #Min. 1st Qu. Median
+ #Mean 3rd Qu.
+ #Max.
+ #0.004362 0.023626 0.048705 0.115174 0.128123 0.90322
+```
+
+## PLAN POISSON
+
+
+```{r}
+ n <- 70
+ pik <- inclusionprobabilities(LOG,n)
+```
+
+```{r}
+set.seed(12345)
+s <- UPpoisson(pik)
+sum(s)
+# [1] 64
+which(s==1)
+```
+
+```{r}
+ set.seed(12345)
+ ns <- replicate(10000,
+ {ss<-UPpoisson(pik)
+  sum(ss)})
+ mean(ns)
+ #[1] 69.9674
+```
+
+```{r}
+ys <- LOGVAC[s==1]
+piks <- pik[s==1]
+(LOGVAC.HT <- HTestimator(ys,piks))
+# [,1]
+# [1,] 9148.435
+```
+
+```{r}
+ (var.est.HT <- sum((1-piks)*(ys^2)/(piks^2)))
+ #[1] 1037840
+ pikl <- outer(pik,pik,"*")
+ diag(pikl) <- pik
+ pikls <- pikl[s==1,s==1]
+ varHT(ys,pikls,method=1)
+ #[1] 1037840
+```
+
+```{r}
+ c(LOGVAC.HT-qnorm(0.975)*sqrt(var.est.HT),
+ LOGVAC.HT+qnorm(0.975)*sqrt(var.est.HT))
+ #[1] 7151.732 11145.137
+ sum(LOGVAC)
+ #[1] 10768
+```
+
+## Plan systématique à probabilités inégales
+
+```{r}
+ n <-70
+ set.seed(12345)
+ s <-UPsystematic(pik)
+ sum(s)
+ #[1] 70
+```
+
+```{r}
+ pikl <- UPsystematicpi2(pik)
+ sum(pikl==0)
+ #[1] 231304
+```
+
+```{r}
+ piks <- pik[s==1]
+ pikls <- pikl[s==1,s==1]
+```
+
+```{r}
+ys <- LOGVAC[s==1]
+HTestimator(ys,piks)
+# [1,] 10638.29
+```
+
+```{r}
+ varHT(ys,pikls,method=2)
+# [1]-15287556
+```
+
+```{r}
+ varest(ys,pik=piks)
+ # [1] 393759.6
+```
+
+## Plan de Poisson conditionnel à la taille
+
+```{r}
+set.seed(12345)
+s <- UPmaxentropy(pik)
+sum(s)
+# [1] 70
+```
+
+```{r}
+piktilde <- pik
+piktilde[pik!=1] <- UPMEpiktildefrompik(pik[pik!=1])
+```
+
+```{r}
+piktildes <- piktilde[s==1]
+pikltilde2 <- UPmaxentropypi2(pik)
+pikltilde2s <- pikltilde2[s==1,s==1]
+```
+
+```{r}
+ ys <- LOGVAC[s==1]
+ (LOGVAC.HT <- HTestimator(ys,piktildes))
+ #[,1]
+ #[1,] 10747.63
+ (V.HT<-varHT(ys,pikltilde2s,method=2))
+ #[1] 537803.7
+```
+
+```{r}
+c(LOGVAC.HT-qnorm(0.975)*sqrt(V.HT),
+ LOGVAC.HT+qnorm(0.975)*sqrt(V.HT))
+# [1] 9310.284 12184.967
+sum(LOGVAC)
+# [1] 10768
+```
+
+
+
