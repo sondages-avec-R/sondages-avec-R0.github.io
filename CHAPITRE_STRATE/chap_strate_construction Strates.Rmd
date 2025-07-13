@@ -1,0 +1,175 @@
+---
+title: "chap_strate_CONSTRUCTION"
+output: pdf_document
+date: "2025-07-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sampling)
+library(survey)
+data(rec99); attach(rec99)
+```
+
+```{r}
+ arrondi <- function(a)
+ {o <- order(a-floor(a),decreasing=T) #ordonne selon parties décimales
+ n <- ceiling(sum(a)) #calcule la taille totale de l’échantillon
+ #avec prise en compte des arrondis éventuels au niveau des nh
+ nbar = n-sum(floor(a)) #calcule le nombre de nh
+ #à arrondir à l’unité par excès
+ nouv <- floor(a) # arrondit tous les nh à l’unité par défaut
+ if (nbar!=0){nouv[o[1:nbar]] <- nouv[o[1:nbar]] + 1}
+ #arrondit certains nh par excès si nécessaire
+ #(les nh avec les plus faibles écarts à l’entier supérieur)
+ if (any(nouv == 0))
+ {print("Attention, une strate est à tirage nul")}
+ nouv}
+```
+
+
+## Construction des strates
+
+## Principales méthodes pour le choix de bornes
+
+```{r}
+STRATQUART <- ifelse(LOG < quantile(LOG,0.25), 1,
+                 ifelse(LOG < quantile(LOG,0.5), 2,
+                   ifelse(LOG < quantile(LOG,0.75), 3, 4)))
+```
+
+```{r}
+STRATALEA <- c(rep(1,139),rep(2,139),rep(3,138),rep(4,138))
+```
+
+##  Mise en œuvre avec le package stratification
+
+```{r}
+library(stratification)
+```
+
+```{r}
+(cum=strata.cumrootf(LOG, n = 70, Ls=4, nclass=60))
+```
+
+```{r}
+cum$bh #les bornes des strates
+#[1] 161.2667 534.4333 1430.0333
+cum$Nh #les tailles des strates
+#[1] 308 146 67 33
+cum$nh #les tailles des échantillons par strate
+#[1] 13 16 16 25
+```
+
+```{r}
+geo <- strata.geo(LOG, n = 70, Ls=4)
+geo$bh
+#[1] 52.77734 232.12066 1020.89263
+geo$Nh
+#[1] 100 265 138 51
+geo$nh
+#[1] 1 11 24 34
+```
+
+```{r}
+LH <- strata.LH(LOG, n = 70, Ls=4,
+ algo="Kozak", algo.control=list(trymany=FALSE))
+LH$bh
+#[1] 181.5 533.5 1302.5
+LH$Nh
+#[1] 326 128 64 36
+LH$nh
+#[1] 15 13 14 28
+```
+
+```{r}
+bh <- strata.bh(LOG, bh=cum$bh, n = 70, Ls=4, takeall=1)
+bh$Nh
+#[1] 308 146 67 33
+bh$nh
+#[1] 11 13 13 33
+```
+
+```{r}
+bh <- strata.bh(LOG, bh=geo$bh, n = 70, Ls=3, takenone=1)
+bh$Nh
+#[1] 100 265 138 51
+bh$nh
+#[1] 0 11 25 34
+geo$nh
+#[1] 1 11 24 34
+```
+
+```{r}
+head(LH$stratumID)
+#[1] 1 1 1 3 1 1
+#Levels: 1 2 3 4
+head(geo$stratumID)
+#[1] 2 2 2 3 2 2
+#Levels: 1 2 3 4
+```
+
+## Comparaison des différentes méthodes de stratification par étude de Monte Carlo
+
+```{r}
+N <- nrow(rec99)
+n <- 70
+#(n.optlog <- arrondi(n*Nh*sdlog/sum(Nh*sdlog)))
+```
+
+```{r}
+STRATCUM <- cum$stratumID
+STRATGEO <- geo$stratumID
+STRATLH <- LH$stratumID
+rec99 <- data.frame(rec99,STRATQUART,STRATALEA,STRATCUM,STRATGEO,STRATLH)
+
+CVsimu <- function(STRA)
+{  
+ 
+ Nh <- table(rec99[[STRA]])
+ rec99.order <- rec99[order(rec99[[STRA]]), ]
+ sdlog <- tapply(LOG,rec99[[STRA]],sd)
+ n.optlog <- arrondi(n*Nh*sdlog/sum(Nh*sdlog))
+ 
+ if (n.optlog[1] == 1) {
+        n.optlog[1] <- 2
+        n.optlog[4] <- n.optlog[4] - 1
+                    }
+ 
+ set.seed(123456)
+ nsim <- 10000
+ est <- numeric(nsim)
+ for (i in 1:nsim)
+  {
+ stsi <- sampling::strata(rec99.order,STRA,size=n.optlog,
+ method="srswor")
+ stsi.data <- getdata(rec99.order,stsi)
+ stratum_formula <- as.formula(paste0("~", STRA))
+ ech.stsi <- svydesign(id=~1,strata=stratum_formula,
+ weights=rep(Nh/n.optlog,n.optlog),                           
+ fpc=rep(n.optlog/Nh,n.optlog),
+ data=stsi.data)
+ est[i] <- svymean(~LOGVAC, ech.stsi)[1]
+ }
+ cv <- sd(est)/mean(est); print(cv)
+}
+
+CVsimu("STRATALEA")
+CVsimu("STRATQUART")
+CVsimu("STRATLOG")
+CVsimu("STRATCUM")
+CVsimu("STRATGEO")
+CVsimu("STRATLH")
+```
+
+```{r}
+# STRATALEA CV : 19.2%
+# STRATQUART CV : 8.9 %
+# STRATLOG CV : 7.1 %
+# cum CV : 7.1 %
+# geo CV : 7.6 %
+# LH CV : 6.9 %
+```
