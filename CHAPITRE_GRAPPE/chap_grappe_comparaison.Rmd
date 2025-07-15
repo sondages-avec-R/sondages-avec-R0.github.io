@@ -1,0 +1,123 @@
+---
+title: "chap_grappe_comparaison"
+output: pdf_document
+date: "2025-07-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sampling)
+library(survey)
+data(rec99)
+```
+
+## Comparaison des stratégies basées sur un plan en grappes par étude de Monte-Carlo
+
+## Plan en grappes selon un tirage SI (SIC)
+
+```{r}
+nI <- 4; NI <- length(table(rec99$BVQ_N))
+nsim <- 10000
+est.grapSI <- numeric(nsim)
+n.grapSI <- numeric(nsim)
+set.seed(123456)
+for (i in 1:nsim)
+ {
+ grap.rec <- sampling::cluster(rec99,clustername=c("BVQ_N"),
+ size=nI,method="srswor")
+ grap2.rec <- getdata(rec99, grap.rec)
+ n.grapSI[i] <- nrow(grap2.rec)
+ ech.grap <- svydesign(ids=~BVQ_N, probs=~Prob,
+ data=grap2.rec,
+ fpc=~rep(nI/NI, n.grapSI[i]))
+ est.grapSI[i] <- svytotal(~LOGVAC, ech.grap)[1]
+ }
+```
+
+```{r}
+mean(est.grapSI)
+#[1] 10791.52
+(cv.grapSI <- sd(est.grapSI)/mean(est.grapSI))
+#[1] 0.3162824
+```
+
+```{r}
+quantile(n.grapSI,prob=c(0.05,0.25,0.5,0.75,0.95))
+#5% 25% 50% 75% 95%
+#40 53 65 81 113
+range(n.grapSI)
+#[1] 24 162
+```
+
+## Plan en grappes selon un tirage STSI
+
+```{r}
+o <- as.data.frame(table(rec99$BVQ_N))
+names(o) <- c("BVQ_N","Ni")
+rec_st <- merge(rec99,o)
+rec_st$stratBVQ <- ifelse(rec_st$Ni < 20, 1, 2)
+NBVQ <- table(rec_st$stratBVQ,rec_st$BVQ_N)
+NBVQ <- ifelse(NBVQ==0,0,1)
+NBVQ<-apply(NBVQ,1,sum)
+n.grappe <- 2
+```
+
+```{r}
+n.sim<-10000
+est.grapSTSI <- numeric(n.sim)
+set.seed(123456)
+for (i in 1:n.sim)
+ { grap.st.rec <- mstage(rec_st,stage=c("stratified","cluster"),
+   varnames=list("stratBVQ","BVQ_N"),
+   size=list(table(rec_st$stratBVQ),
+   c(n.grappe,n.grappe)),
+   method=c("","srswor"))
+   grapSTSI.rec <- getdata(rec_st,grap.st.rec)[[2]]
+   n_BVQ <- table(grapSTSI.rec$stratBVQ)
+   ech.grapSTSI <- svydesign(ids=~BVQ_N,strata =~stratBVQ,
+   probs=~Prob,data=grapSTSI.rec,
+   fpc=~c(rep(n.grappe/NBVQ[1],n_BVQ[1]),
+   rep(n.grappe/NBVQ[2],n_BVQ[2])))
+   est.grapSTSI[i] <- svytotal(~LOGVAC, ech.grapSTSI)[1]}
+```
+
+```{r}
+mean(est.grapSTSI)
+#[1] 10761.91
+(cv.grapSTSI <- sd(est.grapSTSI)/mean(est.grapSTSI))
+#[1] 0.2544259
+```
+
+## Plan en grappes proportionnel à la taille
+
+```{r}
+data(swissmunicipalities)
+swiss1 <- swissmunicipalities[,c(1,5,6)]
+grap.pop <- aggregate(swiss1[,2:3],by=list(swiss1$CT),sum)
+nI <- 6
+pik.swiss <- inclusionprobabilities(grap.pop$HApoly,nI)
+poids <- 1/pik.swiss
+```
+
+```{r}
+n.sim <- 10000
+est.grap_sy <- numeric(n.sim)
+set.seed(123456)
+for (i in 1:n.sim)
+ {
+ sy_swiss <- UPsystematic(pik.swiss)
+ ech.sy_grap <- svydesign(id=~1,weights=poids[sy_swiss==1],
+ data=grap.pop[sy_swiss==1,])
+ est.grap_sy[i] <- svytotal(~Surfacesbois,ech.sy_grap)[1]
+ }
+```
+
+```{r}
+mean(est.grap_sy)
+#[1] 1270994
+sd(est.grap_sy)/mean(est.grap_sy)
+#[1] 0.06953361
+```
