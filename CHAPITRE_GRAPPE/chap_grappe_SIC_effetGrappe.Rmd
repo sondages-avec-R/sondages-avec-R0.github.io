@@ -1,0 +1,231 @@
+---
+title: "chap_grappe_SIC_effetGrappe"
+output: pdf_document
+date: "2025-07-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Mise en oeuvre SIC
+
+```{r}
+library(sampling)
+data(rec99)
+(NI<-length(table(rec99$BVQ_N)))
+```
+
+```{r}
+range(table(rec99$BVQ_N))
+#[1]  5 63
+```
+
+```{r}
+nI <- 4
+set.seed(123456)
+grap.rec <- sampling::cluster(rec99,clustername=c("BVQ_N"),
+ 		size=nI,method="srswor",description=TRUE) 
+#Number of selected clusters: 4 
+#Population total and number of selected units 554 39
+```
+
+```{r}
+grap.data <- getdata(rec99, grap.rec)     
+range(grap.data$Prob)
+#[1] 0.125 0.125
+```
+
+```{r}
+table(grap.data$BVQ_N)
+#31113 31144 31471 31499
+#12 6 10 11
+```
+
+```{r}
+library(survey)
+ech.grap <- svydesign(ids=~BVQ_N, probs = ~Prob, data=grap.data, 
+ 		fpc=~rep(nI/NI, nrow(grap.data))) 
+(est.grappe<-svytotal(~LOGVAC, ech.grap))
+#       total     SE
+#LOGVAC  7368 1815.8
+SE(est.grappe)/coef(est.grappe)
+#          LOGVAC
+#LOGVAC 0.2464406
+```
+
+```{r}
+aggregate(grap.data[,4:5],by=list(grap.data$BVQ_N),sum)
+#  Group.1  LOG LOGVAC
+#1   31113 6834    302
+#2   31144  927     72
+#3   31471 2465    202
+#4   31499 8857    345
+```
+
+## Effet de grappe et efficacité de la stratégie (SIC,HT)
+
+```{r}
+rec99$BVQ_N <- as.factor(rec99$BVQ_N)
+summary(lm(rec99$LOGVAC~rec99$BVQ_N,data=rec99))
+#
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+#
+#Residual standard error: 32.59 on 522 degrees of freedom
+#Multiple R-squared:  0.09216,	Adjusted R-squared:  0.03825 
+#F-statistic: 1.709 on 31 and 522 DF,  p-value: 0.01084
+```
+
+```{r}
+summary(aov(rec99$LOGVAC~rec99$BVQ_N,data=rec99))
+#Df Sum Sq Mean Sq F value Pr(>F)
+#rec99$BVQ_N 31 56292 1816 1.709 0.0108 *
+#Residuals 522 554496 1062
+#---
+#Signif. codes: 0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+SSB <- 56292; SSW <- 554496; SST <- SSB+SSW
+SyU2 <- SST / (554 - 1) ; SyW2 <- SSW / (554 - 32)
+(delta <- 1 - SyW2 / SyU2)
+#[1] 0.03824921
+```
+
+## Plan en grappes de taille fixe sans remise et proportionnel à la taille
+
+## Plan STSI de grappes
+
+```{r}
+o <- as.data.frame(table(rec99$BVQ_N))
+names(o) <- c("BVQ_N","Ni")
+rec_st <- merge(rec99,o)
+rec_st$stratBVQ <- ifelse(rec_st$Ni < 20, 1, 2)
+rec_st[1:3,]
+#BVQ_N CODE_N COMMUNE POPSDC99 LOG LOGVAC stratlog Ni stratBVQ
+#1 31020 31014 ARGUENOS 57 94 1 1 10 1
+#2 31020 31131 CAZAUNOUS 47 56 4 1 10 1
+#3 31020 31348 MONCAUP 26 57 2 1 10 1
+```
+
+```{r}
+NBVQ <- table(rec_st$stratBVQ,rec_st$BVQ_N)
+NBVQ <- ifelse(NBVQ==0,0,1)
+(NBVQ<-apply(NBVQ,1,sum))
+#1 2
+#21 11
+```
+
+```{r}
+n.grappe <- 2
+set.seed(123456)
+grap.rec1 <- sampling::cluster(rec_st[rec_st$stratBVQ==1,],
+ clustername=c("BVQ_N"),size=n.grappe,
+ method="srswor",description=TRUE)
+#Number of selected clusters: 2
+#Number of units in the population and number of selected units:
+#230 21
+grap2.rec1 <- getdata(rec_st[rec_st$stratBVQ==1,], grap.rec1)
+(nrow(grap2.rec1))
+#[1] 21
+```
+
+```{r}
+grap.rec2 <- sampling::cluster(rec_st[rec_st$stratBVQ==2,],
+               clustername=c("BVQ_N"),size=n.grappe,
+               method="srswor",description=TRUE)
+#Number of selected clusters: 2 
+#Number of units in the population and number of selected units:
+#324 47 
+grap2.rec2 <- getdata(rec_st[rec_st$stratBVQ==2,], grap.rec2) 
+(nrow(grap2.rec2))
+#[1] 47
+```
+
+```{r}
+grapSTSI.rec <- rbind(grap2.rec1,grap2.rec2)
+```
+
+```{r}
+(pik.strate<-n.grappe/NBVQ)
+#1 2
+#0.0952381 0.1818182
+```
+
+```{r}
+ech.grapSTSI <- svydesign(ids=~BVQ_N,strata =~stratBVQ,
+ probs=~Prob, data=grapSTSI.rec,
+ fpc=~c(rep(pik.strate[1],nrow(grap2.rec1)),
+ rep(pik.strate[2],nrow(grap2.rec2))))
+```
+
+```{r}
+(est.LOGVAC<-svytotal(~LOGVAC, ech.grapSTSI))
+#       total     SE
+#LOGVAC 10320 1880.8
+SE(est.LOGVAC)/coef(est.LOGVAC)
+#          LOGVAC
+#LOGVAC 0.1822608
+```
+
+## Plan en grappes proportionnel à la taille
+
+```{r}
+data(swissmunicipalities)
+sum(swissmunicipalities$Surfacesbois)
+#[1] 1270996
+
+```
+
+```{r}
+swiss1 <- swissmunicipalities[,c(1,5,6)]
+swiss1[1:5,]
+```
+
+```{r}
+grap.pop <- aggregate(swiss1[,2:3],by=list(swiss1$CT),sum)
+grap.pop[1:5,]
+```
+
+```{r}
+cor(grap.pop$HApoly,grap.pop$Surfacesbois)
+#[1] 0.9601296
+```
+
+```{r}
+sum(grap.pop$HApoly)
+#[1] 3998831
+```
+
+```{r}
+nI <- 6
+pik.swiss <- inclusionprobabilities(grap.pop$HApoly,nI)
+```
+
+```{r}
+poids <- 1/pik.swiss
+set.seed(123456)
+sys_swiss <- UPsystematic(pik.swiss)
+ech.sys_grap <- svydesign(id=~1,weights=poids[sys_swiss==1],
+                 data=grap.pop[sys_swiss==1,])
+```
+
+```{r}
+ech.sys_grap$variables
+```
+
+```{r}
+pik.swiss[sys_swiss==1]
+#[1] 0.8881563 0.1607997 0.2966091 1.0000000 0.4162627 0.7926718
+```
+
+```{r}
+nI*ech.sys_grap$variables$HApoly/sum(grap.pop$HApoly)
+#[1] 0.8764091 0.1586729 0.2926860 1.0661321 0.4107570 0.782187
+```
+
+```{r}
+svytotal(~Surfacesbois,ech.sys_grap)
+#total SE
+#Surfacesbois 1365885 87821
+```
+
+
