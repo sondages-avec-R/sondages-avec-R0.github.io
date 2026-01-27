@@ -1,0 +1,143 @@
+---
+title: "chap_strate_PROPORTION"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-07-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sampling)
+library(survey)
+```
+
+## DONNEES
+
+```{r}
+TUR <- c(rep(1,2070),rep(2,1193),rep(3,1359),rep(4,1342),
+ rep(5,1140))
+AGRI <- c(rep(0,1828),rep(1,242),rep(0,1157),rep(1,36),
+ rep(0,1343),rep(1,16),rep(0,1337),rep(1,5),rep(0,1140))
+EDSANTSOC <- c(rep(0,1468),rep(1,360),rep(0,1198),rep(1,201),
+ rep(0,1076),rep(1,303),rep(0,1051),
+ rep(1,302),rep(0,987),rep(1,158))
+emploi <- data.frame(TUR,AGRI,EDSANTSOC)
+```
+
+```{r}
+ arrondi <- function(a)
+ {o <- order(a-floor(a),decreasing=T) #ordonne selon parties décimales
+ n <- ceiling(sum(a)) #calcule la taille totale de l’échantillon
+ #avec prise en compte des arrondis éventuels au niveau des nh
+ nbar = n-sum(floor(a)) #calcule le nombre de nh
+ #à arrondir à l’unité par excès
+ nouv <- floor(a) # arrondit tous les nh à l’unité par défaut
+ if (nbar!=0){nouv[o[1:nbar]] <- nouv[o[1:nbar]] + 1}
+ #arrondit certains nh par excès si nécessaire
+ #(les nh avec les plus faibles écarts à l’entier supérieur)
+ if (any(nouv == 0))
+ {print("Attention, une strate est à tirage nul")}
+ nouv}
+```
+
+## Estimation d’une proportion
+
+```{r}
+(Nh <- table(TUR))
+ #TUR 1  2  3  4  5
+ #2070 1193 1359 1342 1140
+(sdedsantsoc <- tapply(EDSANTSOC,TUR,sd))
+ #1  2  3  4  5
+ #0.3791263 0.3744514 0.4163836 0.4177625 0.3456766
+(sdagri <- tapply(AGRI,TUR,sd))
+ #1  2  3  5
+ #0.32138852 0.17114317 0.10790421 0.06094808 0.00000000
+```
+
+```{r}
+N <- sum(Nh)
+n <- 100
+emploi.order <- emploi[order(TUR),]
+ # L'écart-type corrigé de la strate 5 est nulle
+ #On choisit de faire fusionner les strates 4 et 5
+emploi.order$TURbis <- ifelse(emploi.order$TUR == 5, 4,emploi.order$TUR)
+(sdagri <- tapply(AGRI,emploi.order$TURbis,sd))
+#         1          2          3          4 
+#0.32138852 0.17114317 0.10790421 0.04484703 
+(Nhbis <- table(emploi.order$TURbis))
+```
+
+```{r}
+(n.prop <- arrondi(n*Nh/N))
+#TUR
+#1 2 3 4 5
+ #29 17 19 19 16
+(n.optedsantsoc <- arrondi(n*Nh*sdedsantsoc/sum(Nh*sdedsantsoc)))
+ #TUR
+ #1 2 3 4 5
+ #29 16 21 20 14
+(n.optagri <- arrondi(n*Nhbis*sdagri/sum(Nhbis*sdagri)))
+# 1  2  3  4 
+#59 18 13 10 
+```
+
+```{r}
+ set.seed(123456)
+ nsim <- 10000
+ est.prop <- numeric(nsim)
+ for (i in 1:nsim)
+  {
+ stsi.prop <- sampling::strata(emploi.order,"TUR",size=n.prop,
+ method="srswor")
+ stsi.data.prop <- getdata(emploi.order,stsi.prop)
+ ech.stsi.prop <- svydesign(id=~1,strata=~TUR,
+ weights=rep(Nh/n.prop,n.prop),                           
+ fpc=rep(n.prop/Nh,n.prop),
+ data=stsi.data.prop)
+ est.prop[i] <- svymean(~EDSANTSOC,ech.stsi.prop)[1]
+ }
+```
+
+```{r}
+mean(est.prop)
+ #[1] 0.1867906
+(cv.prop <- sd(est.prop)/mean(est.prop))
+ #[1] 0.2066102
+```
+
+```{r}
+CVproportion <- function(choixN,choixn,y,strat)
+{
+ set.seed(123456)
+ nsim <- 10000
+ est <- numeric(nsim)
+ for (i in 1:nsim)
+  {
+ stsi <- sampling::strata(emploi.order, stratanames = strat,size=choixn,
+ method="srswor")
+ stsi.data <- getdata(emploi.order,stsi)
+ ech.stsi <- svydesign(id=~1,strata = as.formula(paste0("~", strat)),
+ weights=rep(choixN/choixn,choixn),                           
+ fpc=rep(choixn/choixN,choixn),
+ data=stsi.data)
+ formule <- as.formula(paste0("~", y))
+ est[i] <- svymean(formule, ech.stsi)[1]
+ }
+ cv <- sd(est)/mean(est); print(cv)
+}
+
+CVproportion(Nh,n.prop,"EDSANTSOC","TUR")
+# 20.6
+CVproportion(Nh,n.optedsantsoc,"EDSANTSOC","TUR")
+# 20.7
+CVproportion(Nh,n.prop,"AGRI","TUR")
+# 46.5
+CVproportion(Nhbis,n.optagri,"AGRI","TURbis")
+# 38
+
+```
+
